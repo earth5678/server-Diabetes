@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-
+ 
 const Food = require('../models/food');
 
 router.post('/foods', async (req, res) => {
