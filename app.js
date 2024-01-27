@@ -73,18 +73,19 @@ app.get('/', (req, res) => {
     res.send('Welcome');
 })
 
-app.post('/api/Conversations', async (req, res) => {
+app.post('/api/Conversations', async (req, res, next) => {
     try {
         const { senderId, receiverId } = req.body;
-        const newCoversation = new Conversations({ members: [senderId, receiverId] });
-        await newCoversation.save();
+        const newConversation = new Conversations({ members: [senderId, receiverId] });
+        await newConversation.save();
         res.status(200).send('Conversation created successfully');
     } catch (error) {
-        console.log(error, 'Error')
+        console.error('Error creating conversation:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-})
+});
 
-app.get('/api/Conversations/:userId', async (req, res) => {
+app.get('/api/Conversations/:userId', async (req, res, next) => {
     try {
         const userId = req.params.userId;
         const conversations = await Conversations.find({ members: { $in: [userId] } });
@@ -92,62 +93,67 @@ app.get('/api/Conversations/:userId', async (req, res) => {
             const receiverId = conversation.members.find((member) => member !== userId);
             const user = await Users.findById(receiverId);
             return { user: { receiverId: user._id, email: user.email, fullName: user.fullName }, conversationId: conversation._id }
-        }))
+        }));
         res.status(200).json(await conversationUserData);
     } catch (error) {
-        console.log(error, 'Error')
+        console.error('Error fetching conversations:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-})
+});
 
-app.post('/api/message', async (req, res) => {
+app.post('/api/message', async (req, res, next) => {
     try {
         const { conversationId, senderId, message, receiverId = '' } = req.body;
-        if (!senderId || !message) return res.status(400).send('Please fill all required fields')
+        if (!senderId || !message) return res.status(400).send('Please fill all required fields');
         if (conversationId === 'new' && receiverId) {
-            const newCoversation = new Conversations({ members: [senderId, receiverId] });
-            await newCoversation.save();
-            const newMessage = new Messages({ conversationId: newCoversation._id, senderId, message });
+            const newConversation = new Conversations({ members: [senderId, receiverId] });
+            await newConversation.save();
+            const newMessage = new Messages({ conversationId: newConversation._id, senderId, message });
             await newMessage.save();
-            return res.status(200).send('Message sent successfully');
+            res.status(200).send('Message sent successfully');
         } else if (!conversationId && !receiverId) {
-            return res.status(400).send('Please fill all required fields')
+            res.status(400).send('Please fill all required fields');
+        } else {
+            const newMessage = new Messages({ conversationId, senderId, message });
+            await newMessage.save();
+            res.status(200).send('Message sent successfully');
         }
-        const newMessage = new Messages({ conversationId, senderId, message });
-        await newMessage.save();
-        res.status(200).send('Message sent successfully');
     } catch (error) {
-        console.log(error, 'Error')
+        console.error('Error sending message:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-})
+});
 
-app.get('/api/message/:conversationId', async (req, res) => {
+app.get('/api/message/:conversationId', async (req, res, next) => {
     try {
         const checkMessages = async (conversationId) => {
-            console.log(conversationId, 'conversationId')
+            console.log(conversationId, 'conversationId');
             const messages = await Messages.find({ conversationId });
             const messageUserData = Promise.all(messages.map(async (message) => {
                 const user = await Users.findById(message.senderId);
                 return { user: { id: user._id, email: user.email, fullName: user.fullName }, message: message.message }
             }));
             res.status(200).json(await messageUserData);
-        }
+        };
+
         const conversationId = req.params.conversationId;
         if (conversationId === 'new') {
             const checkConversation = await Conversations.find({ members: { $all: [req.query.senderId, req.query.receiverId] } });
             if (checkConversation.length > 0) {
                 checkMessages(checkConversation[0]._id);
             } else {
-                return res.status(200).json([])
+                res.status(200).json([]);
             }
         } else {
             checkMessages(conversationId);
         }
     } catch (error) {
-        console.log('Error', error)
+        console.error('Error fetching messages:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-})
+});
 
-app.get('/api/users/:userId', async (req, res) => {
+app.get('/api/users/:userId', async (req, res, next) => {
     try {
         const userId = req.params.userId;
         const users = await Users.find({ _id: { $ne: userId } });
@@ -158,11 +164,11 @@ app.get('/api/users/:userId', async (req, res) => {
 
         res.status(200).json(usersData);
     } catch (error) {
-        console.log('Error', error);
+        console.error('Error fetching users:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
 app.listen(port, () => {
-    console.log('listening on port ' + port);
-})
+    console.log('Listening on port ' + port);
+});
